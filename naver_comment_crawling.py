@@ -15,7 +15,7 @@ def my_debug():
     exit()
 
 
-# Make Directory for url
+# MAKE DIRECTORY FOR URL
 def make_dir_url(url):
     try:
         dir_name = url.replace('https://cafe.naver.com/', '').replace('/', '_').strip()
@@ -28,7 +28,7 @@ def make_dir_url(url):
         exit()
 
 
-# Make Excel
+# MAKE EXCEL
 def make_excel(data_list, name):
     """
         :호출예시 make_excel([ [1,2,3,4], [5,6,7,8] ]) or make_excel(2dArray)
@@ -49,10 +49,10 @@ def make_excel(data_list, name):
     ws1.column_dimensions['E'].width = 20
     ws1.append(header1)
 
-    # data save
+    # DATA SAVE
     for comment_data in data_list:
         ws1.append(comment_data)
-    # end
+    # END
     wb.save(FILENAME)
     print("[COMPLETE] [{}] Excel 생성 완료".format(name))
 
@@ -70,7 +70,7 @@ def get_user_info(file_name):
         exit()
 
 
-# URL List
+# URL LIST
 def get_url_list(file_name):
     try:
         file = open('./setting/' + file_name)
@@ -83,7 +83,7 @@ def get_url_list(file_name):
         exit()
 
 
-# Make json url
+# MAKE JSON URL
 def make_json_url():
     bs4 = BeautifulSoup(driver.page_source, 'lxml')
     article_temp = bs4.find('iframe', id='cafe_main').get('src')
@@ -95,30 +95,54 @@ def make_json_url():
     return json_url
 
 
-# Get comment list
-def get_comment_list(main_url, json_url):
+# GET COMMENT LIST AND LAST COMMENT
+def get_comment_list(main_url, json_url, case):
     comment_list = []
+    new_last_comment_id = -1
 
     temp_data = requests.get(json_url).text
     comment_data = json.loads(temp_data)
 
     for comment in comment_data['result']['list']:
         temp = []
-        temp.append(comment['writerid'] + '@naver.com')
-        temp.append(comment['content'])
-        temp.append(main_url.strip())
-        temp.append(comment['writedt'])
-        temp.append(get_now_time())
+        if case is 0:
+            if check_history(main_url, comment["commentid"]):
+                temp.append(comment['writerid'] + '@naver.com')
+                temp.append(comment['content'])
+                temp.append(main_url.strip())
+                temp.append(comment['writedt'])
+                temp.append(get_now_time())
+        elif case is 1:
+            temp.append(comment['writerid'] + '@naver.com')
+            temp.append(comment['content'])
+            temp.append(main_url.strip())
+            temp.append(comment['writedt'])
+            temp.append(get_now_time())
 
         comment_list.append(temp)
-    return comment_list
+
+        if comment["commentid"] > new_last_comment_id:
+            new_last_comment_id = comment["commentid"]
+
+    return [comment_list, new_last_comment_id]
 
 
-# Now time
+# NOW TIME
 def get_now_time():
     now = time.localtime()
     s = "{0}.{1:0>2}.{2:0>2}. {3}:{4}".format(now.tm_year, now.tm_mon, now.tm_mday, now.tm_hour, now.tm_min)
     return s
+
+
+# CHECK HISTORY
+def check_history(url, comment_id):
+    if url in last_list:
+        if last_list[url] < comment_id:
+            return True
+        else:
+            return False
+    else:
+        return True
 
 
 if __name__ == "__main__":
@@ -136,16 +160,38 @@ if __name__ == "__main__":
     # VARIABLE
     current_path = os.getcwd()
 
+    run_case = -1
+
     comment_list_all = []
     comment_list_url = []
 
+    log_data = {"log": []}
+    last_list = {}
+    now_log = {}
+
     # DRIVER INITIATE
-    driver = webdriver.Chrome('chromedriver.exe')
+    driver = webdriver.Chrome('./setting/chromedriver.exe')
     driver.implicitly_wait(3)
+
+    # GET LATEST LOG
+    try:
+        with open('./setting/log.json') as log_file:
+            print("[COMPLETE] Log File 확인")
+            log_data = json.load(log_file)
+            last_list = log_data['log'][-1]['last_comment']
+            run_case = 0
+
+    except FileNotFoundError:
+        print("[PASS] 최초 실행 (Log File 체크 생략)")
+        run_case = 1
 
     # =======
     # MAIN
-    # STEP 0.1 : login
+    # STEP 0.1 : Sign in
+
+    # STEP 1.0 : Set time in log
+    now_log['time'] = get_now_time()
+    now_log['last_comment'] = {}
 
     # STEP 1.1 : Make URL list
     url_list = get_url_list("url.txt")
@@ -165,7 +211,8 @@ if __name__ == "__main__":
         json_url = make_json_url()
 
         # STEP 1.6 : Get comment list
-        comment_list_url = get_comment_list(main_url, json_url)
+        temp_list = get_comment_list(main_url, json_url, run_case)
+        comment_list_url = temp_list[0]
         excel_name = get_now_time().replace('.', '_').replace(' ', '').replace(':', '_')
 
         # STEP 1.7 : Make excel for url
@@ -175,12 +222,28 @@ if __name__ == "__main__":
         for comment in comment_list_url:
             comment_list_all.append(comment)
 
-    # STEP 1.9 : Make excel for all url
+        # STEP 1.9 : Set last comment in log
+        now_log['last_comment'][main_url] = temp_list[1]
+
+    # STEP 1.10 : Set run data in log
+    log_data['log'].append(now_log)
+
+    # STEP 1.11 : Make excel for all url
     os.chdir(current_path + '/result/')
-    make_excel(comment_list_all, "result")
+    make_excel(comment_list_all, "result_" + get_now_time().replace('.', '_').replace(' ', '').replace(':', '_'))
 
     # STEP 2.1 : Quit Driver
     driver.quit()
+
+    # STEP 2.2 : Make log file
+    os.chdir(current_path + '/setting')
+    try:
+        with open('log.json', 'w', encoding='utf-8') as new_log:
+            json.dump(log_data, new_log, ensure_ascii=False, indent='\t')
+        print("[COMPLETE] Log File 생성 완료")
+    except:
+        print("[COMPLETE] Log File 생성 실패")
+        exit()
 
     """
     options = webdriver.ChromeOptions()
