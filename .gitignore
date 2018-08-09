@@ -108,3 +108,9 @@ venv.bak/
 
 # exe file
 *.exe
+
+# json file
+*.json
+
+# result file
+*.xlsx
