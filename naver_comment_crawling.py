@@ -105,21 +105,21 @@ def get_comment_list(main_url, json_url, case):
 
     for comment in comment_data['result']['list']:
         temp = []
-        if case is 0:
-            if check_history(main_url, comment["commentid"]):
+        if case == 0:
+            if check_history(main_url.strip(), comment["commentid"]):
                 temp.append(comment['writerid'] + '@naver.com')
                 temp.append(comment['content'])
                 temp.append(main_url.strip())
                 temp.append(comment['writedt'])
                 temp.append(get_now_time())
-        elif case is 1:
+                comment_list.append(temp)
+        elif case == 1:
             temp.append(comment['writerid'] + '@naver.com')
             temp.append(comment['content'])
             temp.append(main_url.strip())
             temp.append(comment['writedt'])
             temp.append(get_now_time())
-
-        comment_list.append(temp)
+            comment_list.append(temp)
 
         if comment["commentid"] > new_last_comment_id:
             new_last_comment_id = comment["commentid"]
@@ -171,6 +171,7 @@ if __name__ == "__main__":
 
     # DRIVER INITIATE
     driver = webdriver.Chrome('./setting/chromedriver.exe')
+    driver.maximize_window()
     driver.implicitly_wait(3)
 
     # GET LATEST LOG
@@ -188,6 +189,18 @@ if __name__ == "__main__":
     # =======
     # MAIN
     # STEP 0.1 : Sign in
+    user_info = get_user_info('user.txt')
+    # driver.get("https://www.naver.com/")
+    # driver.implicitly_wait(3)
+    # driver.find_element_by_xpath('//*[@id="account"]/div/a/i').click()
+    driver.get('https://nid.naver.com/nidlogin.login')
+    driver.implicitly_wait(3)
+    driver.find_element_by_xpath('//*[@id="id"]').send_keys(user_info[0])
+    driver.implicitly_wait(3)
+    driver.find_element_by_xpath('//*[@id="pw"]').send_keys(user_info[1])
+    driver.implicitly_wait(3)
+    driver.find_element_by_xpath('//*[@id="frmNIDLogin"]/fieldset/input').click()
+    driver.implicitly_wait(3)
 
     # STEP 1.0 : Set time in log
     now_log['time'] = get_now_time()
@@ -223,7 +236,7 @@ if __name__ == "__main__":
             comment_list_all.append(comment)
 
         # STEP 1.9 : Set last comment in log
-        now_log['last_comment'][main_url] = temp_list[1]
+        now_log['last_comment'][main_url.strip()] = temp_list[1]
 
     # STEP 1.10 : Set run data in log
     log_data['log'].append(now_log)
@@ -252,18 +265,6 @@ if __name__ == "__main__":
     options.add_argument("disable-gpu")
 
     driver = webdriver.Chrome('chromedriver.exe', chrome_options=options)
-    """
-
-
-    """
-    os.chdir(current_path + '/' + dir_name_dom)
     
-    temp = get_now_time()
-    print(temp.replace('.', '_').replace(' ', '').replace(':', '_'))
-    
-    
-    user = get_user_info("user.txt")
-    url_list = get_url_list("url.txt")
-    
-    로그인 버튼 : //*[@id="account"]/div/a/i
+    'https://cafe.naver.com/f7days/151169'
     """
