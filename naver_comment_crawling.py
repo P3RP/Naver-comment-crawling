@@ -2,6 +2,8 @@
 
 import os
 import time
+from selenium.common.exceptions import UnexpectedAlertPresentException
+from selenium.common.exceptions import NoAlertPresentException
 from selenium import webdriver
 from openpyxl import Workbook
 from bs4 import BeautifulSoup
@@ -21,10 +23,10 @@ def make_dir_url(url):
         dir_name = url.replace('https://cafe.naver.com/', '').replace('/', '_').strip()
         if not os.path.exists('./result/' + dir_name):
             os.mkdir('./result/' + dir_name)
-        print("[COMPLETE] 해당 URL Directory 확인 성공")
+        print("[COMPLETE] 해당 URL({}) Directory 확인 성공".format(url.strip()))
         return dir_name
     except:
-        print("[ERROR] 해당 URL Directory 확인 실패")
+        print("[ERROR] 해당 URL({}) Directory 확인 실패".format(url.strip()))
         exit()
 
 
@@ -57,6 +59,23 @@ def make_excel(data_list, name):
     print("[COMPLETE] [{}] Excel 생성 완료".format(name))
 
 
+# GET ACCOUNT INFO
+def get_account_info(file_name):
+    try:
+        file = open('./setting/account/' + file_name)
+        print("[COMPLETE] Account File 확인")
+        info_list = file.readlines()
+        file.close()
+
+        user_info_list = info_list[1:3]
+        url_info_list = info_list[5:]
+
+        return [user_info_list, url_info_list]
+    except FileNotFoundError:
+        print("[ERROR] User File 확인 실패")
+        exit()
+
+
 # USER INFO
 def get_user_info(file_name):
     try:
@@ -84,15 +103,21 @@ def get_url_list(file_name):
 
 
 # MAKE JSON URL
-def make_json_url():
-    bs4 = BeautifulSoup(driver.page_source, 'lxml')
-    article_temp = bs4.find('iframe', id='cafe_main').get('src')
-    article_temp = article_temp.split('?')
-    article_attr = article_temp[1]
-    article_attr = article_attr.replace('articleid', 'search.articleid')
-    article_attr = article_attr.replace('clubid', 'search.clubid')
-    json_url = 'https://cafe.naver.com/CommentView.nhn?' + article_attr
-    return json_url
+def make_json_url(url):
+    try:
+        bs4 = BeautifulSoup(driver.page_source, 'lxml')
+        article_temp = bs4.find('iframe', id='cafe_main').get('src')
+        article_temp = article_temp.split('?')
+        article_attr = article_temp[1]
+        article_attr = article_attr.replace('articleid', 'search.articleid')
+        article_attr = article_attr.replace('clubid', 'search.clubid')
+        json_url = 'https://cafe.naver.com/CommentView.nhn?' + article_attr
+        return json_url
+    except UnexpectedAlertPresentException:
+        alert = driver.switch_to_alert()
+        print("[PASS] ({}) ".format(url.strip()), end='')
+        print(alert.text)
+        return "continue"
 
 
 # GET COMMENT LIST AND LAST COMMENT
@@ -167,66 +192,93 @@ if __name__ == "__main__":
 
     log_data = {"log": []}
     last_list = {}
-    now_log = {}
+    new_log = {}
 
     # DRIVER INITIATE
-    driver = webdriver.Chrome('./setting/chromedriver.exe')
-    driver.maximize_window()
-    driver.implicitly_wait(3)
+    # driver = webdriver.Chrome('./setting/chromedriver.exe')
+    # driver.maximize_window()
+    # driver.implicitly_wait(3)
 
     # GET LATEST LOG
-    try:
-        with open('./setting/log.json') as log_file:
-            print("[COMPLETE] Log File 확인")
-            log_data = json.load(log_file)
-            last_list = log_data['log'][-1]['last_comment']
-            run_case = 0
-
-    except FileNotFoundError:
-        print("[PASS] 최초 실행 (Log File 체크 생략)")
-        run_case = 1
+    # try:
+    #     with open('./setting/history.json') as log_file:
+    #         print("[COMPLETE] Log File 확인")
+    #         log_data = json.load(log_file)
+    #         last_list = log_data['log']['last_comment']
+    #         run_case = 0
+    #
+    # except FileNotFoundError:
+    #     print("[PASS] 최초 실행 (Log File 체크 생략)")
+    #     run_case = 1
 
     # =======
     # MAIN
+    # STEP 0.1 : Get account file name
+    account_file_name = input("account 파일 이름 입력 : ")
+
+    info_list = get_account_info(account_file_name)
+
+
+
+
+
+
     # STEP 0.1 : Sign in
-    user_info = get_user_info('user.txt')
-    # driver.get("https://www.naver.com/")
-    # driver.implicitly_wait(3)
-    # driver.find_element_by_xpath('//*[@id="account"]/div/a/i').click()
+    user_info = info_list[0]
+
     driver.get('https://nid.naver.com/nidlogin.login')
     driver.implicitly_wait(3)
-    driver.find_element_by_xpath('//*[@id="id"]').send_keys(user_info[0])
+    driver.find_element_by_xpath('//*[@id="id"]').send_keys(user_info[0].strip())
     driver.implicitly_wait(3)
-    driver.find_element_by_xpath('//*[@id="pw"]').send_keys(user_info[1])
+    driver.find_element_by_xpath('//*[@id="pw"]').send_keys(user_info[1].strip())
     driver.implicitly_wait(3)
     driver.find_element_by_xpath('//*[@id="frmNIDLogin"]/fieldset/input').click()
     driver.implicitly_wait(3)
 
+    # STEP 0.2 : Check whether 'sign in' is completed
+    while driver.current_url != 'https://www.naver.com/':
+        print("[ERROR] 로그인 실패")
+        time.sleep(0.5)
+        print("[FIX] 다시 시도 중...")
+        driver.get('https://nid.naver.com/nidlogin.login')
+        driver.implicitly_wait(3)
+        driver.find_element_by_xpath('//*[@id="id"]').send_keys(user_info[0])
+        driver.implicitly_wait(3)
+        driver.find_element_by_xpath('//*[@id="pw"]').send_keys(user_info[1])
+        driver.implicitly_wait(3)
+        driver.find_element_by_xpath('//*[@id="frmNIDLogin"]/fieldset/input').click()
+        driver.implicitly_wait(3)
+    print("[COMPLETE] 로그인 성공")
+
     # STEP 1.0 : Set time in log
-    now_log['time'] = get_now_time()
-    now_log['last_comment'] = {}
+    new_log['time'] = get_now_time()
+    new_log['last_comment'] = {}
 
     # STEP 1.1 : Make URL list
     url_list = get_url_list("url.txt")
 
     # STEP 1.2 : Get comment in each url
     for main_url in url_list:
-        # STEP 1.3 : Make url directory and move to directory
-        os.chdir(current_path)
-        dir_name = make_dir_url(main_url)
-        os.chdir(current_path + '/result/' + dir_name)
 
-        # STEP 1.4 : Move to url
+        # STEP 1.3 : Move to url
         driver.get(main_url)
         driver.implicitly_wait(3)
 
-        # STEP 1.5 : Make json url
-        json_url = make_json_url()
+        # STEP 1.4 : Make json url
+        message = make_json_url(main_url)
+        if message == 'continue':
+            continue
+        json_url = message
 
-        # STEP 1.6 : Get comment list
+        # STEP 1.5 : Get comment list
         temp_list = get_comment_list(main_url, json_url, run_case)
         comment_list_url = temp_list[0]
         excel_name = get_now_time().replace('.', '_').replace(' ', '').replace(':', '_')
+
+        # STEP 1.6 : Make url directory and move to directory
+        os.chdir(current_path)
+        dir_name = make_dir_url(main_url)
+        os.chdir(current_path + '/result/' + dir_name)
 
         # STEP 1.7 : Make excel for url
         make_excel(comment_list_url, excel_name)
@@ -236,10 +288,10 @@ if __name__ == "__main__":
             comment_list_all.append(comment)
 
         # STEP 1.9 : Set last comment in log
-        now_log['last_comment'][main_url.strip()] = temp_list[1]
+        new_log['last_comment'][main_url.strip()] = temp_list[1]
 
     # STEP 1.10 : Set run data in log
-    log_data['log'].append(now_log)
+    log_data['log'] = new_log
 
     # STEP 1.11 : Make excel for all url
     os.chdir(current_path + '/result/')
@@ -251,7 +303,7 @@ if __name__ == "__main__":
     # STEP 2.2 : Make log file
     os.chdir(current_path + '/setting')
     try:
-        with open('log.json', 'w', encoding='utf-8') as new_log:
+        with open('history.json', 'w', encoding='utf-8') as new_log:
             json.dump(log_data, new_log, ensure_ascii=False, indent='\t')
         print("[COMPLETE] Log File 생성 완료")
     except:
@@ -265,6 +317,4 @@ if __name__ == "__main__":
     options.add_argument("disable-gpu")
 
     driver = webdriver.Chrome('chromedriver.exe', chrome_options=options)
-    
-    'https://cafe.naver.com/f7days/151169'
     """
