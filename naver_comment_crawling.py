@@ -75,6 +75,14 @@ def get_account_info(file_name):
         exit()
 
 
+# GET COUNT OF JSON PAGES
+def get_count_json_url(total, cnt_per_page):
+    count = total / cnt_per_page
+    if total % cnt_per_page != 0:
+        count += 1
+    return int(count)
+
+
 # MAKE JSON URL
 def make_json_url(url):
     try:
@@ -84,8 +92,26 @@ def make_json_url(url):
         article_attr = article_temp[1]
         article_attr = article_attr.replace('articleid', 'search.articleid')
         article_attr = article_attr.replace('clubid', 'search.clubid')
-        json_url = 'https://cafe.naver.com/CommentView.nhn?' + article_attr
-        return json_url
+        json_chk_url = 'https://cafe.naver.com/CommentView.nhn?' + article_attr
+
+        temp_data = requests.get(json_chk_url).text
+
+        try:
+            comment_data = json.loads(temp_data)
+            url_chk = 0
+        except:
+            driver.get(json_chk_url)
+            bs4 = BeautifulSoup(driver.page_source, 'lxml')
+            comment_data = json.loads(bs4.get_text())
+            url_chk = 1
+
+        page_count = get_count_json_url(comment_data['result']['totalCount'], comment_data['result']['countPerPage'])
+
+        json_url_list = []
+        for num in range(1, page_count + 1):
+            json_url_list.append('https://cafe.naver.com/CommentView.nhn?search.page={}&'.format(num) + article_attr)
+        return [json_url_list, url_chk]
+
     except UnexpectedAlertPresentException:
         alert = driver.switch_to_alert()
         print("[PASS] ({}) ".format(url.strip()), end='')
@@ -94,33 +120,40 @@ def make_json_url(url):
 
 
 # GET COMMENT LIST AND LAST COMMENT
-def get_comment_list(main_url, json_url, case):
+def get_comment_list_json(main_url, json_url_list, run_case, url_case):
     comment_list = []
     new_last_comment_id = -1
 
-    temp_data = requests.get(json_url).text
-    comment_data = json.loads(temp_data)
+    for json_url in json_url_list:
+        comment_data = {}
+        if url_case == 0:
+            temp_data = requests.get(json_url).text
+            comment_data = json.loads(temp_data)
+        elif url_case == 1:
+            driver.get(json_url)
+            bs4 = BeautifulSoup(driver.page_source, 'lxml')
+            comment_data = json.loads(bs4.get_text())
 
-    for comment in comment_data['result']['list']:
-        temp = []
-        if case == 0:
-            if check_history(main_url.strip(), comment["commentid"]):
+        for comment in comment_data['result']['list']:
+            temp = []
+            if run_case == 0:
+                if check_history(main_url.strip(), comment["commentid"]):
+                    temp.append(comment['writerid'] + '@naver.com')
+                    temp.append(comment['content'])
+                    temp.append(main_url.strip())
+                    temp.append(comment['writedt'])
+                    temp.append(get_now_time())
+                    comment_list.append(temp)
+            elif run_case == 1:
                 temp.append(comment['writerid'] + '@naver.com')
                 temp.append(comment['content'])
                 temp.append(main_url.strip())
                 temp.append(comment['writedt'])
                 temp.append(get_now_time())
                 comment_list.append(temp)
-        elif case == 1:
-            temp.append(comment['writerid'] + '@naver.com')
-            temp.append(comment['content'])
-            temp.append(main_url.strip())
-            temp.append(comment['writedt'])
-            temp.append(get_now_time())
-            comment_list.append(temp)
 
-        if comment["commentid"] > new_last_comment_id:
-            new_last_comment_id = comment["commentid"]
+            if comment["commentid"] > new_last_comment_id:
+                new_last_comment_id = comment["commentid"]
 
     return [comment_list, new_last_comment_id]
 
@@ -143,6 +176,19 @@ def check_history(url, comment_id):
         return True
 
 
+# CHECK ALL VIEW
+def check_all_view():
+    bs4 = BeautifulSoup(driver.page_source, 'lxml')
+    chk = bs4.find('img', class_='recomm')
+    '#post_34283837 > div > div.tit-box > div.fr > table > tbody > tr > td:nth-child(1) > img'
+    '<img src="https://cafe.pstatic.net/cafe4/btn-permission-all.gif" width="42" height="15" alt="전체공개" class="recomm">'
+    '//*[@id="post_34283837"]/div/div[1]/div[2]/table/tbody/tr/td[1]/img'
+    if chk != None:
+        return 0
+    else:
+        return 1
+
+
 if __name__ == "__main__":
     # =======
     # SETTING
@@ -159,7 +205,9 @@ if __name__ == "__main__":
     last_list = {}
     new_log = {}
 
-    # MAKE RESULT DIRECTORY
+    # =======
+    # MAIN
+    # STEP 0.1 : Make result directory
     try:
         if not os.path.exists('./result'):
             os.mkdir('./result')
@@ -168,13 +216,12 @@ if __name__ == "__main__":
         print("[ERROR] Result Directory 확인/생성 실패")
         exit()
 
-    # =======
-    # MAIN
-    # STEP 0.1 : Get account file name
-    account_file_name = input("[INPUT] account 파일 이름 입력( 확장자 .txt 입력X ) : ")
+    # STEP 0.2 : Get account file name
+    # account_file_name = input("[INPUT] account 파일 이름 입력( 확장자 .txt 입력X ) : ")
+    account_file_name = 'account_01'
     info_list = get_account_info(account_file_name + '.txt')
 
-    # STEP 0.2 : Make result directory for account
+    # STEP 0.3 : Make result directory for account
     try:
         if not os.path.exists('./result/' + account_file_name):
             os.mkdir('./result/' + account_file_name)
@@ -183,7 +230,7 @@ if __name__ == "__main__":
         print("[ERROR] 해당 Account Result Directory 확인/생성 실패")
         exit()
 
-    # STEP 0.3 : Get latest log
+    # STEP 0.4 : Get latest log
     try:
         with open('./setting/log/' + account_file_name + '_log.json') as log_file:
             print("[COMPLETE] Log File 확인")
@@ -195,12 +242,12 @@ if __name__ == "__main__":
         print("[PASS] 최초 실행 (Log File 체크 생략)")
         run_case = 1
 
-    # STEP 0.4.1 Driver initiate
+    # STEP 0.5 Driver initiate
     driver = webdriver.Chrome('./setting/chromedriver.exe')
     driver.maximize_window()
     driver.implicitly_wait(3)
 
-    # STEP 0.4.2 : Sign in
+    # STEP 0.6 : Sign in
     user_info = info_list[0]
 
     driver.get('https://nid.naver.com/nidlogin.login')
@@ -212,7 +259,7 @@ if __name__ == "__main__":
     driver.find_element_by_xpath('//*[@id="frmNIDLogin"]/fieldset/input').click()
     driver.implicitly_wait(3)
 
-    # STEP 0.4.3 : Check whether 'sign in' is completed
+    # STEP 0.7 : Check whether 'sign in' is completed
     while driver.current_url != 'https://www.naver.com/':
         print("[ERROR] 로그인 실패")
         time.sleep(0.5)
@@ -227,29 +274,27 @@ if __name__ == "__main__":
         driver.implicitly_wait(3)
     print("[COMPLETE] 로그인 성공")
 
-    # STEP 1.0 : Set time in log
+    # STEP 1.1 : Set time in log
     new_log['time'] = get_now_time()
     new_log['last_comment'] = {}
 
-    # STEP 1.1 : Make URL list
+    # STEP 1.2 : Make URL list | Move to url
     url_list = info_list[1]
-
-    # STEP 1.2 : Get comment in each url
     for main_url in url_list:
         main_url = main_url.strip()
-
-        # STEP 1.3 : Move to url
         driver.get(main_url)
         driver.implicitly_wait(3)
 
-        # STEP 1.4 : Make json url
+        # STEP 1.3 : Check url whether is all view
+        # STEP 1.4.1 : Make json url
         message = make_json_url(main_url)
         if message == 'continue':
             continue
-        json_url = message
+        json_url_list = message[0]
+        url_case = message[1]
 
-        # STEP 1.5 : Get comment list
-        temp_list = get_comment_list(main_url, json_url, run_case)
+        # STEP 1.4.2 : Get comment list in json url
+        temp_list = get_comment_list_json(main_url, json_url_list, run_case, url_case)
         comment_list_url = temp_list[0]
         excel_name = re.sub('[^A-Za-z0-9]+', '', get_now_time())
 
@@ -275,10 +320,10 @@ if __name__ == "__main__":
     os.chdir(current_path + '/result/' + account_file_name)
     make_excel(comment_list_all, "result_" + re.sub('[^A-Za-z0-9]+', '', get_now_time()))
 
-    # STEP 2.1 : Quit Driver
+    # STEP 1.12 : Quit Driver
     driver.quit()
 
-    # STEP 2.2 : Make log file
+    # STEP 1.13 : Make log file
     os.chdir(current_path + '/setting/log/')
     try:
         with open(account_file_name + '_log.json', 'w', encoding='utf-8') as new_log:
@@ -296,13 +341,3 @@ if __name__ == "__main__":
 
     driver = webdriver.Chrome('chromedriver.exe', chrome_options=options)
     """
-
-    '''
-    https://cafe.naver.com/CommentView.nhn?search.clubid=10094499&search.menuid=790&search.articleid=40578362&search.lastpageview=true&lcs=Y
-    
-    https://cafe.naver.com/CommentView.nhn?search.clubid=10094499&search.menuid=790&search.articleid=40578362&search.lastpageview=true&lcs=Y
-    
-    <div style="display:none;" class="cc_paginate cmt" id="cmt_paginate"></div>
-    
-    https://cafe.naver.com/CommentView.nhn?search.page=2&search.clubid=10094499&search.menuid=736&search.articleid=34283837&search.lastpageview=true&lcs=Y
-    '''
