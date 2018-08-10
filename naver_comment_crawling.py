@@ -207,13 +207,21 @@ if __name__ == "__main__":
 
     # =======
     # MAIN
-    # STEP 0.1 : Make result directory
+    # STEP 0.1 : Make result directory and log directory
     try:
         if not os.path.exists('./result'):
             os.mkdir('./result')
         print("[COMPLETE] Result Directory 확인/생성 성공")
     except:
         print("[ERROR] Result Directory 확인/생성 실패")
+        exit()
+
+    try:
+        if not os.path.exists('./setting/log'):
+            os.mkdir('./setting/log')
+        print("[COMPLETE] Log Directory 확인/생성 성공")
+    except:
+        print("[ERROR] Log Directory 확인/생성 실패")
         exit()
 
     # STEP 0.2 : Get account file name
