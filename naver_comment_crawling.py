@@ -176,19 +176,6 @@ def check_history(url, comment_id):
         return True
 
 
-# CHECK ALL VIEW
-def check_all_view():
-    bs4 = BeautifulSoup(driver.page_source, 'lxml')
-    chk = bs4.find('img', class_='recomm')
-    '#post_34283837 > div > div.tit-box > div.fr > table > tbody > tr > td:nth-child(1) > img'
-    '<img src="https://cafe.pstatic.net/cafe4/btn-permission-all.gif" width="42" height="15" alt="전체공개" class="recomm">'
-    '//*[@id="post_34283837"]/div/div[1]/div[2]/table/tbody/tr/td[1]/img'
-    if chk != None:
-        return 0
-    else:
-        return 1
-
-
 if __name__ == "__main__":
     # =======
     # SETTING
@@ -225,8 +212,7 @@ if __name__ == "__main__":
         exit()
 
     # STEP 0.2 : Get account file name
-    # account_file_name = input("[INPUT] account 파일 이름 입력( 확장자 .txt 입력X ) : ")
-    account_file_name = 'account_01'
+    account_file_name = input("[INPUT] account 파일 이름 입력( 확장자 .txt 입력X ) : ")
     info_list = get_account_info(account_file_name + '.txt')
 
     # STEP 0.3 : Make result directory for account
@@ -251,7 +237,21 @@ if __name__ == "__main__":
         run_case = 1
 
     # STEP 0.5 Driver initiate
-    driver = webdriver.Chrome('./setting/chromedriver.exe')
+    while True:
+        select = int(input("[INPUT] 진행 과정을 보시겠습니까?? (예: 0 | 아니오: 1) : "))
+
+        if select == 0:
+            driver = webdriver.Chrome('./setting/chromedriver.exe')
+            break
+        elif select == 1:
+            options = webdriver.ChromeOptions()
+            options.add_argument('headless')
+            options.add_argument('window-size=1920x1080')
+            options.add_argument("disable-gpu")
+            driver = webdriver.Chrome('./setting/chromedriver.exe', chrome_options=options)
+            break
+        else:
+            print("[ERROR] 다시 입력하세요")
     driver.maximize_window()
     driver.implicitly_wait(3)
 
@@ -340,12 +340,3 @@ if __name__ == "__main__":
     except:
         print("[COMPLETE] Log File 생성 실패")
         exit()
-
-    """
-    options = webdriver.ChromeOptions()
-    options.add_argument('headless')
-    options.add_argument('window-size=1920x1080')
-    options.add_argument("disable-gpu")
-
-    driver = webdriver.Chrome('chromedriver.exe', chrome_options=options)
-    """
